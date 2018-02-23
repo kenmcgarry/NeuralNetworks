@@ -15,6 +15,8 @@ library(GO.db)
 library(dplyr)
 library(tidyr)
 library(ggplot2)
+library(neuralnet)
+
 
 memory.limit(1510241024*1024) # allocate RAM memory (15 GBs)
 setwd("C:/R-files/NeuralNet")  # now point to where the new code lives
@@ -44,7 +46,36 @@ ytest <- xtest[,150]   # class labels for test data
 ytest <- as.factor(ytest)
 
 
+# Train SVM on data using CARET
+trctrl <- trainControl(method = "repeatedcv", number = 10, repeats = 3)
+set.seed(3233)
 
+svm_linear <- train(as.factor(ytrain) ~., data = (xtrain), method = "svmLinear",
+                    trControl=trctrl,
+                    #preProcess = c("center", "scale"),
+                    tuneLength = 10)
+
+# Train SVM on data using e1071
+svm_model <- svm(as.factor(ytrain)~ ., data=xtrain)
+#training set predictions
+pred_train <-predict(svm_model,xtrain)
+mean(pred_train==ytrain)
+
+#test set predictions
+pred_test <-predict(svm_model,xtest)
+mean(pred_test==ytest)
+
+# Train MLP on data
+nnet_train <- xtrain[,1:150]
+nnet_train <- cbind(nnet_train, nnet_train$target == "1")
+nnet_train <- cbind(nnet_train, nnet_train$target == "0")
+names(nnet_train)[151] <- 'target'
+names(nnet_train)[152] <- 'nontarget'
+
+coln <- colnames(nnet_train[1:149]) # columns' name
+a <- as.formula(paste('target + nontarget ~ ' ,paste(coln,collapse='+')))
+mlp_model <- neuralnet(a, nnet_train,lifesign="full",hidden=c(30))
+         
 
 
 

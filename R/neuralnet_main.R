@@ -65,7 +65,7 @@ mean(pred_train==ytrain)
 pred_test <-predict(svm_model,xtest)
 mean(pred_test==ytest)
 
-# Train MLP on data
+# Train MLP on data, need to arrange outputs differently for targets and nontargets
 nnet_train <- xtrain[,1:150]
 nnet_train <- cbind(nnet_train, nnet_train$target == "1")
 nnet_train <- cbind(nnet_train, nnet_train$target == "0")
@@ -76,7 +76,14 @@ coln <- colnames(nnet_train[1:149]) # columns' name
 a <- as.formula(paste('target + nontarget ~ ' ,paste(coln,collapse='+')))
 mlp_model <- neuralnet(a, nnet_train,lifesign="full",hidden=c(30))
          
+# Now predict MLP on test data
+mlp_predict <- compute(mlp_model, xtest[-5])$net.result
+# Put multiple binary output to categorical output
+maxidx <- function(arr) {return(which(arr == max(arr))) }
 
+idx <- apply(mlp_predict, c(1), maxidx)
+prediction <- c('target', 'nontarget')[idx]
+table(prediction, ytest)
 
 
 # pretty plots for paper

@@ -16,6 +16,7 @@ library(boot)
 library(ggplot2)
 library(neuralnet)
 library(nnet)
+library(RSNNS)
 
 # Calculate some statistics about the disease gene network
 # returns a list: net and nodes

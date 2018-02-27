@@ -7,7 +7,7 @@
 
 memory.limit(1510241024*1024) # allocate RAM memory (15 GBs)
 setwd("C:/R-files/NeuralNet")  # now point to where the new code lives
-load("NCA-February26th2018.RData")
+load("NCA-February27th2018.RData")
 source("neuralnet_proteins_functions.R")  # load in the functions required for this work. 
 
 # restore mcrap data from original source, rather than reuse.
@@ -74,7 +74,7 @@ coln <- colnames(nnet_train[1:149]) # columns' name
 a <- as.formula(paste('target + nontarget ~ ' ,paste(coln,collapse='+')))
 mlp_model <- neuralnet::neuralnet(a,nnet_train,lifesign="full",act.fct="logistic",stepmax = 20000,
                        algorithm = "rprop+",  threshold = 0.01,
-                       hidden=c(100,10),linear.output=TRUE)  # train the MLP
+                       hidden=c(80,20),linear.output=TRUE)  # train the MLP
          
 # Now predict MLP on test data
 mlp_predict <- neuralnet::compute(mlp_model, xtest[-5])$net.result
@@ -99,31 +99,11 @@ ytest_nnet <- as.numeric(ytest)
 ytest_nnet[ytest_nnet == 2]  <- "nontarget"
 ytest_nnet[ytest_nnet == 1]  <- "target"
 
-train_control <- trainControl(method="repeatedcv", number = 10,repeats = 5, verboseIter=TRUE,
-                              summaryFunction = twoClassSummary)
-train_control <- trainControl(method="cv",verboseIter=TRUE,summaryFunction = twoClassSummary)
-
-my_grid <- expand.grid(size = seq(from=80, to=120, by=10), decay=seq(from=0.1, to=0.5, by=0.1))
-
-my_grid <- expand.grid(layer1=100,layer2=20)
-
-nnet_model <- train(x=xtrain[,1:149], y=ytrain_nnet,
-                 method = "nnet",
-                 #preProcess = "range", 
-                 #tuneLength = 2,
-                 tuneGrid = my_grid,
-                 trControl = train_control,
-                 #metric = "ROC",
-                 trace = TRUE,
-                 MaxNWts=100000,
-                 maxit = 100)
-
-table(ytest_nnet,  predict(nnet_model,xtest[,1:149]))  
-acc <- table(predict(nnet_model,xtest[,1:149]),ytest_nnet)
+# Use nnet package - 
+nnet_model <- nnet(as.factor(ytrain)~., data=xtrain[,1:149],size=45,MaxNWts=100000,maxit=1000,decay=.001)
+acc <- table(predict(nnet_model, xtest[,1:149], type = "class"),ytest)
 acc <- as.vector(acc); TN <- acc[1]; FN <- acc[2]; FP <- acc[3]; TP <- acc[4]  
 cat("\nMLP accuracy calculated by (TP+TN)/(TP+TN+FP+FN)= ",(TP + TN)/(TP + TN + FP + FN))
-
-
 
 # pretty plots for paper
 bar_plot_gg2(drug_targets,1,"red")  # plot all target proteins

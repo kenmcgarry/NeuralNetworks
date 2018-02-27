@@ -4,23 +4,10 @@
 # started : 19/1/2018
 # completed:
 
-library(ROCR)
-library(kernlab)
-library(randomForest)
-library("e1071")
-library(caret)
-library(sand)
-library(igraph)
-library(GO.db)
-library(dplyr)
-library(tidyr)
-library(ggplot2)
-library(neuralnet)
-
 
 memory.limit(1510241024*1024) # allocate RAM memory (15 GBs)
 setwd("C:/R-files/NeuralNet")  # now point to where the new code lives
-load("NCA-February23rd2018.RData")
+load("NCA-February26th2018.RData")
 source("neuralnet_proteins_functions.R")  # load in the functions required for this work. 
 
 # restore mcrap data from original source, rather than reuse.
@@ -46,26 +33,37 @@ ytest <- xtest[,150]   # class labels for test data
 ytest <- as.factor(ytest)
 
 
-# Train SVM on data using CARET
-trctrl <- trainControl(method = "repeatedcv", number = 10, repeats = 3)
-set.seed(3233)
 
-svm_linear <- train(as.factor(ytrain) ~., data = (xtrain), method = "svmLinear",
-                    trControl=trctrl,
-                    #preProcess = c("center", "scale"),
-                    tuneLength = 10)
-
-# Train SVM on data using e1071
-svm_model <- svm(as.factor(ytrain)~ ., data=xtrain)
-#training set predictions
-pred_train <-predict(svm_model,xtrain)
-mean(pred_train==ytrain)
-
+# Train SVM on data using e1071 package
+svm_model <- e1071::svm(as.factor(ytrain)~ ., data=xtrain,scale=FALSE,cross=10)
 #test set predictions
 pred_test <-predict(svm_model,xtest)
-mean(pred_test==ytest)
+acc <- table(pred_test, ytest)
+acc <- as.vector(acc); TN <- acc[1]; FN <- acc[2]; FP <- acc[3]; TP <- acc[4]  
+cat("\nSVM accuracy calculated by (TP+TN)/(TP+TN+FP+FN)= ",(TP + TN)/(TP + TN + FP + FN))
+
+
+# Train RBF on data using e1071 package
+rbf_model <- e1071::svm(as.factor(ytrain)~., data=xtrain,scale=FALSE,
+                        kernel="radial", gamma=1, cost =1, cross=10)
+pred_test <-predict(rbf_model,xtest)
+acc <- table(pred_test, ytest)
+acc <- as.vector(acc); TN <- acc[1]; FN <- acc[2]; FP <- acc[3]; TP <- acc[4]  
+cat("\nRBF accuracy calculated by (TP+TN)/(TP+TN+FP+FN)= ",(TP + TN)/(TP + TN + FP + FN))
+
+
+# Train Random Forest on data 
+rf_model <-randomForest(as.factor(ytrain) ~.,data=xtrain[,1:149],importance=TRUE,proximity=TRUE,keep.forest=TRUE)
+pred_test <- predict(rf_model,xtest)
+acc<-table(pred_test, ytest)
+print(rf_model)
+round(importance(rf_model), 2)
+varImpPlot(rf_model,main="",type=2,color="black",pch=16) 
+acc <- as.vector(acc); TN <- acc[1]; FN <- acc[2]; FP <- acc[3]; TP <- acc[4]  
+cat("\nRandom Forest accuracy calculated by (TP+TN)/(TP+TN+FP+FN)= ",(TP + TN)/(TP + TN + FP + FN))
 
 # Train MLP on data, need to arrange outputs differently for targets and nontargets
+# using neuralnet package.
 nnet_train <- xtrain[,1:150]
 nnet_train <- cbind(nnet_train, nnet_train$target == "1")
 nnet_train <- cbind(nnet_train, nnet_train$target == "0")
@@ -74,21 +72,61 @@ names(nnet_train)[152] <- 'nontarget'
 
 coln <- colnames(nnet_train[1:149]) # columns' name
 a <- as.formula(paste('target + nontarget ~ ' ,paste(coln,collapse='+')))
-mlp_model <- neuralnet(a, nnet_train,lifesign="full",hidden=c(30))
+mlp_model <- neuralnet::neuralnet(a,nnet_train,lifesign="full",act.fct="logistic",stepmax = 20000,
+                       algorithm = "rprop+",  threshold = 0.01,
+                       hidden=c(100,10),linear.output=TRUE)  # train the MLP
          
 # Now predict MLP on test data
-mlp_predict <- compute(mlp_model, xtest[-5])$net.result
+mlp_predict <- neuralnet::compute(mlp_model, xtest[-5])$net.result
 # Put multiple binary output to categorical output
 maxidx <- function(arr) {return(which(arr == max(arr))) }
-
 idx <- apply(mlp_predict, c(1), maxidx)
 prediction <- c('target', 'nontarget')[idx]
-table(prediction, ytest)
+acc <- table(prediction, ytest)
+acc <- as.vector(acc); TN <- acc[1]; FN <- acc[2]; FP <- acc[3]; TP <- acc[4]  
+cat("\nMLP accuracy calculated by (TP+TN)/(TP+TN+FP+FN)= ",(TP + TN)/(TP + TN + FP + FN))
+
+
+# Now try nnet package in conjunction with caret - use 10-fold CV
+train_control <- trainControl(method="repeatedcv", number = 10,repeats = 5, 
+                           classProbs=TRUE,summaryFunction = twoClassSummary)
+my_grid <- expand.grid(size = seq(from=80, to=120, by=10), decay=seq(from=0.1, to=0.5, by=0.1))
+# The data needs to in yet another different format!
+ytrain_nnet <- ytrain
+ytrain_nnet[ytrain_nnet == 0]  <- "nontarget"
+ytrain_nnet[ytrain_nnet == 1]  <- "target"
+ytest_nnet <- as.numeric(ytest)
+ytest_nnet[ytest_nnet == 2]  <- "nontarget"
+ytest_nnet[ytest_nnet == 1]  <- "target"
+
+train_control <- trainControl(method="repeatedcv", number = 10,repeats = 5, verboseIter=TRUE,
+                              summaryFunction = twoClassSummary)
+train_control <- trainControl(method="cv",verboseIter=TRUE,summaryFunction = twoClassSummary)
+
+my_grid <- expand.grid(size = seq(from=80, to=120, by=10), decay=seq(from=0.1, to=0.5, by=0.1))
+
+my_grid <- expand.grid(layer1=100,layer2=20)
+
+nnet_model <- train(x=xtrain[,1:149], y=ytrain_nnet,
+                 method = "nnet",
+                 #preProcess = "range", 
+                 #tuneLength = 2,
+                 tuneGrid = my_grid,
+                 trControl = train_control,
+                 #metric = "ROC",
+                 trace = TRUE,
+                 MaxNWts=100000,
+                 maxit = 100)
+
+table(ytest_nnet,  predict(nnet_model,xtest[,1:149]))  
+acc <- table(predict(nnet_model,xtest[,1:149]),ytest_nnet)
+acc <- as.vector(acc); TN <- acc[1]; FN <- acc[2]; FP <- acc[3]; TP <- acc[4]  
+cat("\nMLP accuracy calculated by (TP+TN)/(TP+TN+FP+FN)= ",(TP + TN)/(TP + TN + FP + FN))
+
 
 
 # pretty plots for paper
 bar_plot_gg2(drug_targets,1,"red")  # plot all target proteins
 bar_plot_gg2(hubtargetlist,2,"blue")  # plot target
-
 
 

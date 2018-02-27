@@ -1,6 +1,22 @@
 # neuralnet_proteins_functions.R
 # Predict protein type based on gene ontology mappings
 
+library(ROCR)
+library(kernlab)
+library(randomForest)
+library("e1071")
+library(caret)
+library(sand)
+library(igraph)
+library(GO.db)
+library(plyr) 
+library(dplyr)
+library(tidyr)
+library(boot)
+library(ggplot2)
+library(neuralnet)
+library(nnet)
+
 # Calculate some statistics about the disease gene network
 # returns a list: net and nodes
 get_gstatistics <- function(gt) {

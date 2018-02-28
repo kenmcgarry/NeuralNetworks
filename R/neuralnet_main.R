@@ -39,7 +39,7 @@ svm_model <- e1071::svm(as.factor(ytrain)~ ., data=xtrain[,1:149],scale=FALSE,cr
 #test set predictions
 pred_test <-predict(svm_model,xtest[,1:149])
 
-pred_svm <- ROCR::prediction(factor2int(pred_test),ytest)
+pred_svm <- ROCR::prediction(messyfactor2int(pred_test),ytest)
 svm.roc <- ROCR::performance(pred_svm, "tpr", "fpr")
 svm.pr <- ROCR::performance(pred_svm, "prec", "rec")
 
@@ -141,7 +141,6 @@ attributes(mlp.roc)$roc_name <- "MLP"
 attributes(rf.roc)$roc_name <- "RandomForest"
 attributes(rbf.roc)$roc_name <- "RBF"
 attributes(svm.roc)$roc_name <- "SVM"
-#roc_plot(rf.roc,rbf.roc,mlp.roc,svm.roc)
 roc_plot(rbf.roc,mlp.roc,svm.roc,rf.roc)
 
 # PR plots of classifiers

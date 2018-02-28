@@ -38,6 +38,11 @@ ytest <- as.factor(ytest)
 svm_model <- e1071::svm(as.factor(ytrain)~ ., data=xtrain,scale=FALSE,cross=10)
 #test set predictions
 pred_test <-predict(svm_model,xtest)
+
+pred_svm <- ROCR::prediction(messyfactor2int(pred_test),ytest)
+svm.roc <- ROCR::performance(pred_svm, "tpr", "fpr")
+svm.pr <- ROCR::performance(pred_svm, "prec", "rec")
+
 acc <- table(pred_test, ytest)
 acc <- as.vector(acc); TN <- acc[1]; FN <- acc[2]; FP <- acc[3]; TP <- acc[4]  
 cat("\nSVM accuracy calculated by (TP+TN)/(TP+TN+FP+FN)= ",(TP + TN)/(TP + TN + FP + FN))
@@ -46,16 +51,26 @@ cat("\nSVM accuracy calculated by (TP+TN)/(TP+TN+FP+FN)= ",(TP + TN)/(TP + TN + 
 # Train RBF on data using e1071 package
 rbf_model <- e1071::svm(as.factor(ytrain)~., data=xtrain,scale=FALSE,
                         kernel="radial", gamma=1, cost =1, cross=10)
-pred_test <-predict(rbf_model,xtest)
-acc <- table(pred_test, ytest)
+pred_rbf <-predict(rbf_model,xtest)
+pred <- ROCR::prediction(messyfactor2int(pred_rbf),ytest)
+rbf.roc <- ROCR::performance(pred, "tpr", "fpr")
+rbf.pr <- ROCR::performance(pred, "prec", "rec")
+
+acc <- table(pred_rbf, ytest)
 acc <- as.vector(acc); TN <- acc[1]; FN <- acc[2]; FP <- acc[3]; TP <- acc[4]  
 cat("\nRBF accuracy calculated by (TP+TN)/(TP+TN+FP+FN)= ",(TP + TN)/(TP + TN + FP + FN))
 
 
 # Train Random Forest on data 
 rf_model <-randomForest(as.factor(ytrain) ~.,data=xtrain[,1:149],importance=TRUE,proximity=TRUE,keep.forest=TRUE)
-pred_test <- predict(rf_model,xtest)
-acc<-table(pred_test, ytest)
+pred_rf <- predict(rf_model,xtest)
+
+rf.roc <- as.vector(pred_rf)
+pred_test <- ROCR::prediction(messyfactor2int(pred_rf),ytest)
+rf.roc <- ROCR::performance(pred_test, "tpr", "fpr")
+rf.pr <- ROCR::performance(pred_test, "prec", "rec")
+
+acc<-table(pred_rf, ytest)
 print(rf_model)
 round(importance(rf_model), 2)
 varImpPlot(rf_model,main="",type=2,color="black",pch=16) 
@@ -100,13 +115,35 @@ ytest_nnet[ytest_nnet == 2]  <- "nontarget"
 ytest_nnet[ytest_nnet == 1]  <- "target"
 
 # Use nnet package - 
-nnet_model <- nnet(as.factor(ytrain)~., data=xtrain[,1:149],size=45,MaxNWts=100000,maxit=1000,decay=.001)
+nnet_model <- nnet(as.factor(ytrain)~., data=xtrain[,1:149],size=50,MaxNWts=100000,maxit=1000,decay=.001)
 acc <- table(predict(nnet_model, xtest[,1:149], type = "class"),ytest)
+nnet_pred <- predict(nnet_model, xtest[,1:149], type = "class")
 acc <- as.vector(acc); TN <- acc[1]; FN <- acc[2]; FP <- acc[3]; TP <- acc[4]  
 cat("\nMLP accuracy calculated by (TP+TN)/(TP+TN+FP+FN)= ",(TP + TN)/(TP + TN + FP + FN))
+
+pred_mlp <- ROCR::prediction(factor2int(nnet_pred),ytest)
+mlp.roc <- ROCR::performance(pred_mlp, "tpr", "fpr")
+mlp.pr <- ROCR::performance(pred_mlp, "prec", "rec")
+
+# ROC plots of classifiers
+attributes(mlp.roc)$roc_name <- "MLP"
+attributes(rf.roc)$roc_name <- "RandomForest"
+attributes(rbf.roc)$roc_name <- "RBF"
+attributes(svm.roc)$roc_name <- "SVM"
+roc_plot(rf.roc,rbf.roc,mlp.roc,svm.roc)
+
+# PR plots of classifiers
+attributes(mlp.pr)$pr_name <- "MLP"
+attributes(rf.pr)$pr_name <- "RandomForest"
+attributes(rbf.pr)$pr_name <- "RBF"
+attributes(svm.pr)$pr_name <- "SVM"
+pr_plot(rf.pr,rbf.pr,mlp.pr,svm.pr)
 
 # pretty plots for paper
 bar_plot_gg2(drug_targets,1,"red")  # plot all target proteins
 bar_plot_gg2(hubtargetlist,2,"blue")  # plot target
+
+
+
 
 

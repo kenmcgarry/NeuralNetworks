@@ -2,6 +2,7 @@
 # Predict protein type based on gene ontology mappings
 
 library(ROCR)
+library(plotROC)
 library(kernlab)
 library(randomForest)
 library("e1071")
@@ -11,6 +12,7 @@ library(igraph)
 library(GO.db)
 library(plyr) 
 library(dplyr)
+library(reshape2)
 library(tidyr)
 library(boot)
 library(ggplot2)
@@ -77,8 +79,93 @@ bar_plot_gg2 <- function(dt,br,mycolor){
     theme(axis.title.y = element_text(color="black", size=14, face="bold"))
 }
 
+# factor2int will convert as suggested - the ROC::prediction function requires 
+# continuous values
+factor2int <- function(targettype){
+  targettype <- as.numeric(targettype)
+  #for (i in 1:length(targettype)){
+  #  if(targettype[i] == 1) {  
+  #    targettype[i] <- 0}}
+  #for (i in 1:length(targettype)){
+  #  if(targettype[i] == 2) {  
+  #    targettype[i] <- 1}}
+  
+  for (i in 1:length(targettype)){
+    if(targettype[i] == 1) {  
+      targettype[i] <- runif(1, 7.0, 9.9)}}
+  for (i in 1:length(targettype)){
+    if(targettype[i] == 0) {  
+      targettype[i] <- runif(1,0.01,0.02)}}
+  return(targettype)
+}
+
+messyfactor2int <- function(targettype){
+  targettype <- as.numeric(targettype)
+  for (i in 1:length(targettype)){
+    if(targettype[i] == 1) {  
+      targettype[i] <- 0}}
+  for (i in 1:length(targettype)){
+    if(targettype[i] == 2) {  
+      targettype[i] <- 1}}
+  
+  for (i in 1:length(targettype)){
+    if(targettype[i] == 1) {  
+      targettype[i] <- runif(1, 7.0, 9.9)}}
+  for (i in 1:length(targettype)){
+    if(targettype[i] == 0) {  
+      targettype[i] <- runif(1,0.01,0.02)}}
+  return(targettype)
+}
+
+# plot several ROC curves on one plot
+roc_plot <- function(...){
+  args = list(...)
+  df <- data.frame(x=0,y=0,classifier="DECTREE",stringsAsFactors = FALSE)
+  
+  for (i in 1:length(args)){
+    x <- attributes(args[[i]])$x.values
+    y <- attributes(args[[i]])$y.values
+    #y <- as.numeric(as.character(unlist(y[[i]])))
+    #x <- as.numeric(as.character(unlist(x[[i]])))
+    classifier <- rep(attributes(args[[i]])$roc_name,length(x))
+    df_temp <- data.frame(x,y,classifier,stringsAsFactors = FALSE)
+    names(df_temp) <- names(df) 
+    df <- rbind(df, df_temp) 
+    }
+  
+  df <- df[-1,]    # 1st entry is rubbish, so remove it
+  df <- na.omit(df)
+  ggplot(data=df, aes(x=x, y=y, group=classifier,colour=classifier)) + geom_line(size=1.5) +
+    labs(x="False Positive Rate",y="True Positive Rate") +
+    labs(color="") +
+    theme(legend.position = "bottom", legend.direction = "horizontal")
+  
+ }   
 
 
+# plot several PR curves on one plot
+pr_plot <- function(...){
+  args = list(...)
+  df <- data.frame(x=0,y=0,classifier="DECTREE",stringsAsFactors = FALSE)
+  
+  for (i in 1:length(args)){
+    x <- attributes(args[[i]])$x.values
+    y <- attributes(args[[i]])$y.values
+    #y <- as.numeric(as.character(unlist(y[[i]])))
+    #x <- as.numeric(as.character(unlist(x[[i]])))
+    classifier <- rep(attributes(args[[i]])$pr_name,length(x))
+    df_temp <- data.frame(x,y,classifier,stringsAsFactors = FALSE)
+    names(df_temp) <- names(df) 
+    df <- rbind(df, df_temp) 
+  }
+  
+  df <- df[-1,]    # 1st entry is rubbish, so remove it
+  df <- na.omit(df)
+  ggplot(data=df, aes(x=x, y=y, group=classifier,colour=classifier)) + geom_line(size=1.5) +
+    labs(x="Recall",y="Precision") +
+    labs(color="") +
+    theme(legend.position = "bottom", legend.direction = "horizontal")
+}
 
 
 

@@ -125,8 +125,9 @@ roc_plot <- function(...){
   for (i in 1:length(args)){
     x <- attributes(args[[i]])$x.values
     y <- attributes(args[[i]])$y.values
-    #y <- as.numeric(as.character(unlist(y[[i]])))
-    #x <- as.numeric(as.character(unlist(x[[i]])))
+    #if(attr(args[[i]], "roc_name") == "RandomForest"){
+    #  y <- as.numeric((unlist(y[i])))
+    #  x <- as.numeric((unlist(x[i])))}
     classifier <- rep(attributes(args[[i]])$roc_name,length(x))
     df_temp <- data.frame(x,y,classifier,stringsAsFactors = FALSE)
     names(df_temp) <- names(df) 
@@ -139,7 +140,6 @@ roc_plot <- function(...){
     labs(x="False Positive Rate",y="True Positive Rate") +
     labs(color="") +
     theme(legend.position = "bottom", legend.direction = "horizontal")
-  
  }   
 
 

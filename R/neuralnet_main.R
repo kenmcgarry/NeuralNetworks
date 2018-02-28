@@ -35,11 +35,11 @@ ytest <- as.factor(ytest)
 
 
 # Train SVM on data using e1071 package
-svm_model <- e1071::svm(as.factor(ytrain)~ ., data=xtrain,scale=FALSE,cross=10)
+svm_model <- e1071::svm(as.factor(ytrain)~ ., data=xtrain[,1:149],scale=FALSE,cross=20)
 #test set predictions
-pred_test <-predict(svm_model,xtest)
+pred_test <-predict(svm_model,xtest[,1:149])
 
-pred_svm <- ROCR::prediction(messyfactor2int(pred_test),ytest)
+pred_svm <- ROCR::prediction(factor2int(pred_test),ytest)
 svm.roc <- ROCR::performance(pred_svm, "tpr", "fpr")
 svm.pr <- ROCR::performance(pred_svm, "prec", "rec")
 
@@ -62,20 +62,31 @@ cat("\nRBF accuracy calculated by (TP+TN)/(TP+TN+FP+FN)= ",(TP + TN)/(TP + TN + 
 
 
 # Train Random Forest on data 
-rf_model <-randomForest(as.factor(ytrain) ~.,data=xtrain[,1:149],importance=TRUE,proximity=TRUE,keep.forest=TRUE)
-pred_rf <- predict(rf_model,xtest)
+rf_model <-randomForest(as.factor(ytrain) ~.,data=xtrain[,1:149],proximity=TRUE,keep.forest=TRUE)
+predicted_rf <- predict(rf_model,newdata=xtest[,1:149],type = "prob")  # predict(m,newdata_matrix,type='prob')
 
-rf.roc <- as.vector(pred_rf)
-pred_test <- ROCR::prediction(messyfactor2int(pred_rf),ytest)
-rf.roc <- ROCR::performance(pred_test, "tpr", "fpr")
-rf.pr <- ROCR::performance(pred_test, "prec", "rec")
+#predicted_rf <- as.vector(predicted_rf)
+pred_rf <- ROCR::prediction((predicted_rf[,2]),ytest)
+rf.roc <- ROCR::performance(pred_rf, "tpr", "fpr")
+rf.pr <- ROCR::performance(pred_rf, "prec", "rec")
 
-acc<-table(pred_rf, ytest)
+x <- rf.roc@x.values
+y <- rf.roc@y.values
+y <- as.numeric(as.character(unlist(y[[i]])))
+x <- as.numeric(as.character(unlist(x[[i]])))
+
+rf.roc@x.values <- x
+slot(rf.roc, "x.values") <- x 
+plot(rf.roc)
+plot(rf.pr)
+
+acc<-table((predicted_rf[,2]), ytest)
 print(rf_model)
 round(importance(rf_model), 2)
 varImpPlot(rf_model,main="",type=2,color="black",pch=16) 
 acc <- as.vector(acc); TN <- acc[1]; FN <- acc[2]; FP <- acc[3]; TP <- acc[4]  
 cat("\nRandom Forest accuracy calculated by (TP+TN)/(TP+TN+FP+FN)= ",(TP + TN)/(TP + TN + FP + FN))
+
 
 # Train MLP on data, need to arrange outputs differently for targets and nontargets
 # using neuralnet package.
@@ -130,7 +141,8 @@ attributes(mlp.roc)$roc_name <- "MLP"
 attributes(rf.roc)$roc_name <- "RandomForest"
 attributes(rbf.roc)$roc_name <- "RBF"
 attributes(svm.roc)$roc_name <- "SVM"
-roc_plot(rf.roc,rbf.roc,mlp.roc,svm.roc)
+#roc_plot(rf.roc,rbf.roc,mlp.roc,svm.roc)
+roc_plot(rbf.roc,mlp.roc,svm.roc,rf.roc)
 
 # PR plots of classifiers
 attributes(mlp.pr)$pr_name <- "MLP"

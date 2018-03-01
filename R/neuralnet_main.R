@@ -7,7 +7,8 @@
 
 memory.limit(1510241024*1024) # allocate RAM memory (15 GBs)
 setwd("C:/R-files/NeuralNet")  # now point to where the new code lives
-load("NCA-February27th2018.RData")
+load("NCA-1stMarch2018.RData")
+load("matrixdata.RData") # contains mmt and mcrap
 source("neuralnet_proteins_functions.R")  # load in the functions required for this work. 
 
 # restore mcrap data from original source, rather than reuse.
@@ -153,6 +154,28 @@ pr_plot(rf.pr,rbf.pr,mlp.pr,svm.pr)
 # pretty plots for paper
 bar_plot_gg2(drug_targets,1,"red")  # plot all target proteins
 bar_plot_gg2(hubtargetlist,2,"blue")  # plot target
+
+########## select proteins that are nontargets but not in train or test set #########
+# use the trained classifiers on these candidates for potential targets
+
+allnontargets <- mcrap[mcrap$targets == 0,]
+unknown <- negatives[!rownames(allnontargets) %in% rownames(negatives),]
+unknown <- data.frame(unknown)
+
+uindex <- base::sample(nrow(unknown),10) # indices of training samples
+candidates <- unknown[sample(1:nrow(unknown), 100,replace=FALSE),] 
+candidates <- unknown[1:2000,]
+candidates <- data.frame(candidates)
+targettype <- predict(rf_fit,unknown)
+candidates <- data.frame(protein=rownames(unknown),target=targettype)
+
+# Use Venn diagram to highlight commonly identifed protein targets between four classifiers
+
+
+
+
+
+
 
 
 

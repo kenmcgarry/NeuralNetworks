@@ -12,5 +12,5 @@ The following R source files contain:
 
 `neuralnet_proteins_functions.R` contains the workhorse functions and loads in R libraries.
 
-`neuralnet_complex_latent.R` produces plots that appear in the paper.
+`neuralnet_complex_latent.R` build the complex network and latent network models.
 

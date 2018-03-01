@@ -50,9 +50,9 @@ cat("\nSVM accuracy calculated by (TP+TN)/(TP+TN+FP+FN)= ",(TP + TN)/(TP + TN + 
 
 
 # Train RBF on data using e1071 package
-rbf_model <- e1071::svm(as.factor(ytrain)~., data=xtrain,scale=FALSE,
+rbf_model <- e1071::svm(as.factor(ytrain)~., data=xtrain[,1:149],scale=FALSE,
                         kernel="radial", gamma=1, cost =1, cross=10)
-pred_rbf <-predict(rbf_model,xtest)
+pred_rbf <-predict(rbf_model,xtest[,1:149])
 pred <- ROCR::prediction(messyfactor2int(pred_rbf),ytest)
 rbf.roc <- ROCR::performance(pred, "tpr", "fpr")
 rbf.pr <- ROCR::performance(pred, "prec", "rec")
@@ -104,7 +104,7 @@ mlp_model <- neuralnet::neuralnet(a,nnet_train,lifesign="full",act.fct="logistic
                        hidden=c(80,20),linear.output=TRUE)  # train the MLP
          
 # Now predict MLP on test data
-mlp_predict <- neuralnet::compute(mlp_model, xtest[-5])$net.result
+mlp_predict <- neuralnet::compute(mlp_model, xtest[,1:149])$net.result
 # Put multiple binary output to categorical output
 maxidx <- function(arr) {return(which(arr == max(arr))) }
 idx <- apply(mlp_predict, c(1), maxidx)
@@ -156,23 +156,61 @@ bar_plot_gg2(drug_targets,1,"red")  # plot all target proteins
 bar_plot_gg2(hubtargetlist,2,"blue")  # plot target
 
 ########## select proteins that are nontargets but not in train or test set #########
-# use the trained classifiers on these candidates for potential targets
+# use the trained classifiers on new data "unknown" for potential targets
 
 allnontargets <- mcrap[mcrap$targets == 0,]
 unknown <- negatives[!rownames(allnontargets) %in% rownames(negatives),]
 unknown <- data.frame(unknown)
 
+# shape up new data
 uindex <- base::sample(nrow(unknown),10) # indices of training samples
-candidates <- unknown[sample(1:nrow(unknown), 100,replace=FALSE),] 
-candidates <- unknown[1:2000,]
+candidates <- unknown[sample(1:nrow(unknown), 1000,replace=FALSE),] 
+candidates <- unknown[1:600,1:149]
 candidates <- data.frame(candidates)
-targettype <- predict(rf_fit,unknown)
-candidates <- data.frame(protein=rownames(unknown),target=targettype)
+
+# ensure models output in common format to allow comparisions with Venn diagram however
+# a far amount of processing is required with the mlp, since neuralnet package is
+# very different.
+candidates_rf <-  predict(rf_model,candidates)
+candidates_svm <- predict(svm_model,candidates)
+candidates_rbf <- predict(rbf_model,candidates)
+candidates_mlp <- neuralnet::compute(mlp_model,candidates)$net.result
+  maxidx <- function(arr) {return(which(arr == max(arr))) }
+  idx <- apply(candidates_mlp, c(1), maxidx)
+  idx <- as.integer(idx)
+  prediction <- c('target', 'nontarget')[idx]
+  prediction <- gsub('nontarget', 0, prediction)
+  prediction <- gsub('target', 1, prediction)
+
+  # make a nice well structured data frame  
+cnames <- names(candidates_svm)
+comp_models <- data.frame(candidates=cnames,
+                          rf=as.vector(candidates_rf),
+                          svm=as.vector(candidates_svm), 
+                          rbf=as.vector(candidates_rbf),
+                          mlp=as.vector(prediction))
+
+# use data frame to fill classifier lists of what they think are target proteins
+p_rf  <- comp_models$candidates[comp_models$rf ==1]
+p_svm <- comp_models$candidates[comp_models$svm ==1]
+p_rbf <- comp_models$candidates[comp_models$rbf ==1]
+p_mlp <- comp_models$candidates[comp_models$mlp ==1]
+
 
 # Use Venn diagram to highlight commonly identifed protein targets between four classifiers
-
-
-
+library(VennDiagram)
+plot.new()
+venn.plot <- venn.diagram(list(p_rf,p_svm,p_rbf,p_mlp), 
+                          NULL, 
+                          fill=c("red", "blue","green","pink"), 
+                          alpha=c(0.5,0.5,0.5,0.5), 
+                          cex = 2, 
+                          cat.fontface=2, 
+                          margins =c(10,10),
+                          cat.cex=2,
+                          #main = "Venn Diagram showing shared side effects for donepezil,galantamine,rivastigmine",
+                          category.names=c("RandomForest", "SVM","RBF","MLP"))
+grid.draw(venn.plot)
 
 
 

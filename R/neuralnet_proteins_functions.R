@@ -163,5 +163,40 @@ pr_plot <- function(...){
 }
 
 
+get_gstatistics <- function(gt) {
+  net <- data.frame( 
+    modu=igraph::modularity(gt, membership(cluster_walktrap(gt))),
+    avepath=igraph::average.path.length(gt),
+    nedges=igraph::ecount(gt),
+    nverts=igraph::vcount(gt),
+    transit=igraph::transitivity(gt),
+    diam=igraph::diameter(gt,weights=NA),
+    connect=igraph::is.connected(gt))
+  
+  nodes <- data.frame(   
+    closeness=igraph::estimate_closeness(gt,mode="all",cutoff=3),
+    degree=(igraph::degree(gt)),
+    betweenness=igraph::estimate_betweenness(gt,directed=FALSE,cutoff=3),
+    hubness=igraph::hub_score(gt)$vector,
+    central=vector(mode="integer", length=net$nverts),
+    comm=vector(mode="integer", length=net$nverts))
+  
+  tmp <- igraph::cluster_walktrap(gt)
+  nodes$comm <- as.vector(membership(tmp))
+  alpha <- igraph::alpha_centrality(gt,alpha=0.1)  
+  nodes$central <- as.vector(alpha)
+  
+  cat("\nOverall network statistics:")
+  cat("\n   Modularity ",net$modu)
+  cat("\n   Average path ",net$avepath)
+  cat("\n   N edges ",net$nedges)
+  cat("\n   N vertices ",net$nverts)
+  cat("\n   Transitivity ",net$transit)
+  cat("\n   Diameter ",net$diam)
+  cat("\n   Is connected? ",net$connect)
+  gstats = list(net=net, nodes=nodes)
+  return(gstats)
+}
+
 
 

@@ -11,7 +11,7 @@ load("NCA-1stMarch2018.RData")
 load("matrixdata.RData") # contains mmt and mcrap
 source("neuralnet_proteins_functions.R")  # load in the functions required for this work. 
 
-# restore mcrap data from original source, rather than reuse.
+# restore mcrap data from original source, rather than reimplement.
 mcrap <- data.table::transpose(as.data.frame(mmt))
 mcrap <- data.frame(mcrap)
 colnames(mcrap) <- rownames(mmt)
@@ -191,31 +191,14 @@ comp_models <- data.frame(candidates=cnames,
                           mlp=as.vector(prediction))
 
 # use data frame to fill classifier lists of what they think are target proteins
-p_rf  <- comp_models$candidates[comp_models$rf ==1]
+p_rf  <- comp_models$candidates[comp_models$rf  ==1]
 p_svm <- comp_models$candidates[comp_models$svm ==1]
 p_rbf <- comp_models$candidates[comp_models$rbf ==1]
 p_mlp <- comp_models$candidates[comp_models$mlp ==1]
 
 
-# Use Venn diagram to highlight commonly identifed protein targets between four classifiers
-library(VennDiagram)
-plot.new()
-venn.plot <- venn.diagram(list(p_rf,p_svm,p_rbf,p_mlp), 
-                          NULL, 
-                          fill=c("red", "blue","green","pink"), 
-                          alpha=c(0.5,0.5,0.5,0.5), 
-                          cex = 2, 
-                          cat.fontface=2, 
-                          margins =c(10,10),
-                          cat.cex=2,
-                          #main = "Venn Diagram showing shared side effects for donepezil,galantamine,rivastigmine",
-                          category.names=c("RandomForest", "SVM","RBF","MLP"))
-grid.draw(venn.plot)
-
-
-
-
-
+# plot a Venn diagram to highlight commonly identifed protein targets between four classifiers
+plot_venn(p_rf,p_svm,p_rbf,p_mlp)
 
 
 

@@ -198,5 +198,26 @@ get_gstatistics <- function(gt) {
   return(gstats)
 }
 
+plot_venn <- function(p_rf,p_svm,p_rbf,p_mlp){
+  # Use Venn diagram to highlight commonly identifed protein targets between four classifiers
+  library(VennDiagram)
+  plot.new()
+  venn.plot <- venn.diagram(list(p_rf,p_svm,p_rbf,p_mlp), 
+                            NULL, 
+                            fill=c("red", "blue","green","yellow"), 
+                            alpha=c(0.5,0.5,0.5,0.5), 
+                            cex = 2, 
+                            cat.fontface=2, 
+                            margins =c(10,10),
+                            cat.cex=2,
+                            #main = "Venn Diagram showing shared side effects for donepezil,galantamine,rivastigmine",
+                            category.names=c("RandomForest", "SVM","RBF","MLP"))
+  grid.draw(venn.plot)  
+  
+  
+}
+
+
+
 
 

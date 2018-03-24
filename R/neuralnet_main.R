@@ -1,15 +1,20 @@
 # neuralnet_proteins.R
 # Predict protein type based on gene ontology mappings
-# Neural Computing Applications
+# for Neural Computing Applications or possibly BMC Bioinformatics
 # started : 19/1/2018
 # completed:
 
 
 memory.limit(1510241024*1024) # allocate RAM memory (15 GBs)
 setwd("C:/R-files/NeuralNet")  # now point to where the new code lives
-load("NCA-1stMarch2018.RData")
-load("matrixdata.RData") # contains mmt and mcrap
-source("neuralnet_proteins_functions.R")  # load in the functions required for this work. 
+#load("NCA-1stMarch2018.RData")
+#load("matrixdata.RData") # contains mmt and mcrap
+source("neuralnet_functions.R")  # load in the functions required for this work. 
+source("neuralnet_data.R")  # load in raw data, preprocess it. 
+
+ppi_net <- build_network(ppi)
+pnames <- unique(c(unique(ppi$Gene_A),unique(ppi$Gene_B)))
+mm <- go_slim_annotation(pnames)
 
 # restore mcrap data from original source, rather than reimplement.
 mcrap <- data.table::transpose(as.data.frame(mmt))
@@ -64,27 +69,23 @@ cat("\nRBF accuracy calculated by (TP+TN)/(TP+TN+FP+FN)= ",(TP + TN)/(TP + TN + 
 
 # Train Random Forest on data 
 rf_model <-randomForest(as.factor(ytrain) ~.,data=xtrain[,1:149],proximity=TRUE,keep.forest=TRUE)
-predicted_rf <- predict(rf_model,newdata=xtest[,1:149],type = "prob")  # predict(m,newdata_matrix,type='prob')
+predicted_rf <- predict(rf_model,newdata=xtest[,1:149],type = "prob")  
 
-#predicted_rf <- as.vector(predicted_rf)
 pred_rf <- ROCR::prediction((predicted_rf[,2]),ytest)
 rf.roc <- ROCR::performance(pred_rf, "tpr", "fpr")
 rf.pr <- ROCR::performance(pred_rf, "prec", "rec")
 
 x <- rf.roc@x.values
 y <- rf.roc@y.values
-y <- as.numeric(as.character(unlist(y[[i]])))
-x <- as.numeric(as.character(unlist(x[[i]])))
 
-rf.roc@x.values <- x
-slot(rf.roc, "x.values") <- x 
-plot(rf.roc)
-plot(rf.pr)
+pred_rf <- stats::predict(rf_model,xtest)
+confusionMatrix(data=pred_rf,reference=ytest,positive="1")
+
 
 acc<-table((predicted_rf[,2]), ytest)
 print(rf_model)
-round(importance(rf_model), 2)
-varImpPlot(rf_model,main="",type=2,color="black",pch=16) 
+#round(importance(rf_model), 2)
+#varImpPlot(rf_model,main="",type=2,color="black",pch=16) 
 acc <- as.vector(acc); TN <- acc[1]; FN <- acc[2]; FP <- acc[3]; TP <- acc[4]  
 cat("\nRandom Forest accuracy calculated by (TP+TN)/(TP+TN+FP+FN)= ",(TP + TN)/(TP + TN + FP + FN))
 
@@ -182,7 +183,7 @@ candidates_mlp <- neuralnet::compute(mlp_model,candidates)$net.result
   prediction <- gsub('nontarget', 0, prediction)
   prediction <- gsub('target', 1, prediction)
 
-  # make a nice well structured data frame  
+# make a nice well structured data frame  
 cnames <- names(candidates_svm)
 comp_models <- data.frame(candidates=cnames,
                           rf=as.vector(candidates_rf),
@@ -196,6 +197,7 @@ p_svm <- comp_models$candidates[comp_models$svm ==1]
 p_rbf <- comp_models$candidates[comp_models$rbf ==1]
 p_mlp <- comp_models$candidates[comp_models$mlp ==1]
 
+Reduce(intersect, list(p_rf,p_svm,p_rbf,p_mlp))  # the proteins id'd by all four classifiers
 
 # plot a Venn diagram to highlight commonly identifed protein targets between four classifiers
 plot_venn(p_rf,p_svm,p_rbf,p_mlp)

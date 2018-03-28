@@ -29,8 +29,8 @@ data(GO_IC)
 
 # remove isolated proteins if they are connected to the giant component
 delete_isolates <- function(gt) {
-  isol <- V(gt)[degree(gt)==0]
-  gt <- delete.vertices(gt, isol)
+  isol <- V(gt)[igraph::degree(gt)==0]
+  gt <- igraph::delete.vertices(gt, isol)
   return(gt)
   
 }
@@ -58,21 +58,21 @@ build_network <- function(ppi){
   ppi_net <- as.undirected(ppi_net); 
   ppi_net <- igraph::simplify(ppi_net)  # remove duplicates and self-loops
   ppi_net <- delete_isolates(ppi_net)
-  delete.vertices(igraph::simplify(ppi_net), degree(ppi_net)==0)
+  delete.vertices(igraph::simplify(ppi_net), igraph::degree(ppi_net)==0)
   
   V(ppi_net)[1:vcount(ppi_net)]$target <- 0   # Intialise all to zeros
   V(ppi_net)[1:vcount(ppi_net)]$hub <- 0   # Intialise all to zeros
   V(ppi_net)[1:vcount(ppi_net)]$type <- "unknown"   # Intialise protein "type" to unknown
   
   # get main component only - ignore lessor weakly connected groups
-  V(ppi_net)$comp <- components(ppi_net)$membership
-  ppi_net <- induced_subgraph(ppi_net,V(ppi_net)$comp==1)
+  V(ppi_net)$comp <- igraph::components(ppi_net)$membership
+  ppi_net <- igraph::induced_subgraph(ppi_net,V(ppi_net)$comp==1)
   
   # remove from joint_ppi the lost nodes 
   survivors <- V(ppi_net)$name
   joint_ppi <- un_targets[un_targets %in% survivors] 
   
-  ppi_net <- set_vertex_attr(ppi_net,"target",joint_ppi,1) # Now assign "1" if protein is a target (very neat!)
+  ppi_net <- igraph::set_vertex_attr(ppi_net,"target",joint_ppi,1) # Now assign "1" if protein is a target (very neat!)
   return(ppi_net)
 }
 
@@ -85,9 +85,9 @@ annotate_with_go <- function(plist){
   nproteins <- length(plist)
  
   tempgo <- gene_GO_terms[plist]  # Annotate!!
-  tempgo <- tempgo[!sapply(tempgo, is.null)]  # Not all proteins have GO annotations so sadly remove them.
+  tempgo <- tempgo[!sapply(tempgo, is.null)]  # Not all proteins have GO annotations so remove them.
   go_proteins <- names(tempgo) # Unfortunately, we are left with only 13,417 proteins.
-  # sort GO terms by the three categories, breakdown is useful for summary statistics
+  # sort GO terms by the three categories, breakdown maybe useful at later date for summary statistics
   cc <- go$id[go$name == "cellular_component"]
   bp <- go$id[go$name == "biological_process"]
   mf <- go$id[go$name == "molecular_function"] 
@@ -100,7 +100,7 @@ annotate_with_go <- function(plist){
 
 # go_slim_annotation() reduces the complexities of numerous GO annoatations into a few key terms.
 # http://www.geneontology.org/page/go-slim-and-subset-guide#On_the_web. This uses the GSEABase package.
-# WARNING: this takes a looong time to compute..... approx 1.5 hours
+# WARNING: this takes a looong time to compute..... approx 3 hours on my laptop
 go_slim_annotation <- function(mylist){
   gostuff <- annotate_with_go(mylist)
   gostuff <-gostuff[names(which(lapply(gostuff, length) >1))]  # keep only genes with 1 or more GO annotations
@@ -108,7 +108,7 @@ go_slim_annotation <- function(mylist){
   assign("go_cc", TRUE, env=globalenv())
   assign("go_bp", TRUE, env=globalenv())
   
-  # create the matrix for classification algorithms
+  # create the matrix for classification algorithms, if a GO term is present mark it with by "1" in that column
   mm <- matrix(0, 149, length(names(gostuff)))  # Number of GO terms in GoSlim (CC+BP+MF) x Number of genes
   colnames(mm) <- names(gostuff)
   rownames(mm) <- give_rownames_mm()
@@ -144,7 +144,7 @@ go_slim_annotation <- function(mylist){
 give_classlabels_mm <- function(mm){
   
   survivors <- colnames(mm)
-  mmt <- matrix(0, 1, length(tmp)) 
+  mmt <- matrix(0, 1, ncol(mm)) 
   rownames(mmt) <- "targets"
   # delete nodes without GO terms from ppi_net 
   #biglist <- V(ppi_net)$name
@@ -479,7 +479,7 @@ roc_plot <- function(...){
   
   df <- df[-1,]    # 1st entry is rubbish, so remove it
   df <- na.omit(df)
-  ggplot(data=df, aes(x=x, y=y, group=classifier,colour=classifier)) + geom_line(size=1.5) +
+  ggplot(data=df, aes(x=x, y=y, group=classifier,colour=classifier)) + geom_line(size=1.0) +
     labs(x="False Positive Rate",y="True Positive Rate") +
     labs(color="") +
     theme(legend.position = "bottom", legend.direction = "horizontal")
@@ -502,7 +502,7 @@ pr_plot <- function(...){
   
   df <- df[-1,]    # 1st entry is rubbish, so remove it
   df <- na.omit(df)
-  ggplot(data=df, aes(x=x, y=y, group=classifier,colour=classifier)) + geom_line(size=1.5) +
+  ggplot(data=df, aes(x=x, y=y, group=classifier,colour=classifier)) + geom_line(size=1.0) +
     labs(x="Recall",y="Precision") +
     labs(color="") +
     theme(legend.position = "bottom", legend.direction = "horizontal")

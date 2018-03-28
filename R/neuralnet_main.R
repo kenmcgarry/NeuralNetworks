@@ -7,40 +7,39 @@
 
 memory.limit(1510241024*1024) # allocate RAM memory (15 GBs)
 setwd("C:/R-files/NeuralNet")  # now point to where the new code lives
-#load("NCA-1stMarch2018.RData")
+load("NCA-27thMarch2018.RData")
 #load("matrixdata.RData") # contains mmt and mcrap
 source("neuralnet_functions.R")  # load in the functions required for this work. 
 source("neuralnet_data.R")  # load in raw data, preprocess it. 
 
-ppi_net <- build_network(ppi)
-pnames <- unique(c(unique(ppi$Gene_A),unique(ppi$Gene_B)))
-mm <- go_slim_annotation(pnames)
 
-# restore mcrap data from original source, rather than reimplement.
-mcrap <- data.table::transpose(as.data.frame(mmt))
-mcrap <- data.frame(mcrap)
-colnames(mcrap) <- rownames(mmt)
-rownames(mcrap) <- colnames(mmt)
+### Only uncomment this code if you intend building training matrix (mm & mt) from scratch - it takes a long time!
+#pnames <- unique(c(unique(ppi$Gene_A),unique(ppi$Gene_B)))
+#mm <- go_slim_annotation(pnames)
+#mt <- give_classlabels_mm(mm) 
 
-positives <- mcrap[mcrap$targets == 1,]  # get all targets (1,443)
-negatives <- mcrap[mcrap$targets == 0,]  # get all nontargets (11,554)
+## Convert matrix to dataframe and balance out the data by undersampling
+mnew <- data.table::transpose(as.data.frame(mt))
+mnew <- data.frame(mnew)
+colnames(mnew) <- rownames(mt)
+rownames(mnew) <- colnames(mt)
+positives <- mnew[mnew$targets == 1,]  # get all targets (1,449)
+negatives <- mnew[mnew$targets == 0,]  # get all nontargets (11,567)
 allnegatives <- data.frame(negatives)
-negatives <- sample_n(negatives, nrow(positives)) # only use 1,443 of them to match positives
+negatives <- sample_n(negatives, nrow(positives)) # only use 1,449 of them to match positives
 balanced_dat <- rbind(positives,negatives)
 
-## Prepare a training and a test set ##
-ntrain <- round(nrow(balanced_dat)*0.8) # number of training examples
-tindex <- sample(nrow(balanced_dat),ntrain) # indices of training samples
-xtrain <- data.frame(balanced_dat[tindex,])
-xtest <-  data.frame(balanced_dat[-tindex,])
 
-ytrain <- xtrain[,150]  # class labels for training data
+## Prepare a training and a test set 
+ntrain <- round(nrow(bdata)*0.8) # number of training examples
+tindex <- sample(nrow(bdata),ntrain) # indices of training samples
+xtrain <- data.frame(bdata[tindex,])
+xtest <-  data.frame(bdata[-tindex,])
+ytrain <- xtrain[,150]  # class labels for training data (column 150 is class label)
 ytest <- xtest[,150]   # class labels for test data
 ytest <- as.factor(ytest)
 
-
-
-# Train SVM on data using e1071 package
+## Train SVM on data using e1071 package
 svm_model <- e1071::svm(as.factor(ytrain)~ ., data=xtrain[,1:149],scale=FALSE,cross=20)
 #test set predictions
 pred_test <-predict(svm_model,xtest[,1:149])
@@ -52,6 +51,9 @@ svm.pr <- ROCR::performance(pred_svm, "prec", "rec")
 acc <- table(pred_test, ytest)
 acc <- as.vector(acc); TN <- acc[1]; FN <- acc[2]; FP <- acc[3]; TP <- acc[4]  
 cat("\nSVM accuracy calculated by (TP+TN)/(TP+TN+FP+FN)= ",(TP + TN)/(TP + TN + FP + FN))
+caret::confusionMatrix(data=pred_test,reference=ytest,positive="1")
+auc.perf = ROCR::performance(pred_svm, measure = "auc")
+auc.perf@y.values
 
 
 # Train RBF on data using e1071 package
@@ -65,22 +67,25 @@ rbf.pr <- ROCR::performance(pred, "prec", "rec")
 acc <- table(pred_rbf, ytest)
 acc <- as.vector(acc); TN <- acc[1]; FN <- acc[2]; FP <- acc[3]; TP <- acc[4]  
 cat("\nRBF accuracy calculated by (TP+TN)/(TP+TN+FP+FN)= ",(TP + TN)/(TP + TN + FP + FN))
-
+caret::confusionMatrix(data=pred_rbf,reference=ytest,positive="1")
+auc.perf = ROCR::performance(pred, measure = "auc")
+auc.perf@y.values
 
 # Train Random Forest on data 
-rf_model <-randomForest(as.factor(ytrain) ~.,data=xtrain[,1:149],proximity=TRUE,keep.forest=TRUE)
+rf_model <-randomForest(as.factor(ytrain) ~.,data=xtrain[,1:149],proximity=TRUE,keep.forest=TRUE,ntree=500,mtry=12)
 predicted_rf <- predict(rf_model,newdata=xtest[,1:149],type = "prob")  
-
 pred_rf <- ROCR::prediction((predicted_rf[,2]),ytest)
+auc.perf = ROCR::performance(pred_rf, measure = "auc")
+auc.perf@y.values
+
 rf.roc <- ROCR::performance(pred_rf, "tpr", "fpr")
 rf.pr <- ROCR::performance(pred_rf, "prec", "rec")
-
 x <- rf.roc@x.values
 y <- rf.roc@y.values
-
 pred_rf <- stats::predict(rf_model,xtest)
-confusionMatrix(data=pred_rf,reference=ytest,positive="1")
+caret::confusionMatrix(data=pred_rf,reference=ytest,positive="1")
 
+order(importance(rf_model), 2)
 
 acc<-table((predicted_rf[,2]), ytest)
 print(rf_model)
@@ -113,6 +118,15 @@ prediction <- c('target', 'nontarget')[idx]
 acc <- table(prediction, ytest)
 acc <- as.vector(acc); TN <- acc[1]; FN <- acc[2]; FP <- acc[3]; TP <- acc[4]  
 cat("\nMLP accuracy calculated by (TP+TN)/(TP+TN+FP+FN)= ",(TP + TN)/(TP + TN + FP + FN))
+caret::confusionMatrix(data=mlp_predict,reference=ytest,positive="1")
+
+prediction[prediction =="target"] <- 1
+prediction[prediction =="nontarget"] <- 0
+prediction <- factor2int(as.integer(prediction))
+pred_mlp <- ROCR::prediction(prediction,ytest)
+auc.perf = ROCR::performance(pred_mlp, measure = "auc")
+auc.perf@y.values
+
 
 
 # Now try nnet package in conjunction with caret - use 10-fold CV
@@ -133,10 +147,15 @@ acc <- table(predict(nnet_model, xtest[,1:149], type = "class"),ytest)
 nnet_pred <- predict(nnet_model, xtest[,1:149], type = "class")
 acc <- as.vector(acc); TN <- acc[1]; FN <- acc[2]; FP <- acc[3]; TP <- acc[4]  
 cat("\nMLP accuracy calculated by (TP+TN)/(TP+TN+FP+FN)= ",(TP + TN)/(TP + TN + FP + FN))
+caret::confusionMatrix(data=nnet_pred,reference=ytest,positive="1")
 
 pred_mlp <- ROCR::prediction(factor2int(nnet_pred),ytest)
 mlp.roc <- ROCR::performance(pred_mlp, "tpr", "fpr")
 mlp.pr <- ROCR::performance(pred_mlp, "prec", "rec")
+
+auc.perf = ROCR::performance(pred_mlp, measure = "auc")
+auc.perf@y.values
+
 
 # ROC plots of classifiers
 attributes(mlp.roc)$roc_name <- "MLP"
@@ -159,7 +178,7 @@ bar_plot_gg2(hubtargetlist,2,"blue")  # plot target
 ########## select proteins that are nontargets but not in train or test set #########
 # use the trained classifiers on new data "unknown" for potential targets
 
-allnontargets <- mcrap[mcrap$targets == 0,]
+allnontargets <- mnew[mnew$targets == 0,]
 unknown <- negatives[!rownames(allnontargets) %in% rownames(negatives),]
 unknown <- data.frame(unknown)
 
@@ -169,12 +188,13 @@ candidates <- unknown[sample(1:nrow(unknown), 1000,replace=FALSE),]
 candidates <- unknown[1:600,1:149]
 candidates <- data.frame(candidates)
 
-# ensure models output in common format to allow comparisions with Venn diagram however
-# a far amount of processing is required with the mlp, since neuralnet package is
-# very different.
-candidates_rf <-  predict(rf_model,candidates)
-candidates_svm <- predict(svm_model,candidates)
-candidates_rbf <- predict(rbf_model,candidates)
+candidates <- unknown[1:1280,1:149]
+
+# VENN: ensure models output in common format to allow comparisions with Venn diagram however
+# a large amount of processing is required for the mlp, since neuralnet package is very different.
+candidates_rf <-  stats::predict(rf_model,candidates)
+candidates_svm <- stats::predict(svm_model,candidates)
+candidates_rbf <- stats::predict(rbf_model,candidates)
 candidates_mlp <- neuralnet::compute(mlp_model,candidates)$net.result
   maxidx <- function(arr) {return(which(arr == max(arr))) }
   idx <- apply(candidates_mlp, c(1), maxidx)
@@ -184,9 +204,9 @@ candidates_mlp <- neuralnet::compute(mlp_model,candidates)$net.result
   prediction <- gsub('target', 1, prediction)
 
 # make a nice well structured data frame  
-cnames <- names(candidates_svm)
+cnames <- rownames(candidates)
 comp_models <- data.frame(candidates=cnames,
-                          rf=as.vector(candidates_rf),
+                          rf =as.vector(candidates_rf),
                           svm=as.vector(candidates_svm), 
                           rbf=as.vector(candidates_rbf),
                           mlp=as.vector(prediction))
@@ -197,10 +217,21 @@ p_svm <- comp_models$candidates[comp_models$svm ==1]
 p_rbf <- comp_models$candidates[comp_models$rbf ==1]
 p_mlp <- comp_models$candidates[comp_models$mlp ==1]
 
-Reduce(intersect, list(p_rf,p_svm,p_rbf,p_mlp))  # the proteins id'd by all four classifiers
+Reduce(intersect, list(p_rf,p_svm,p_rbf,p_mlp))  # the proteins identified by all four classifiers
 
 # plot a Venn diagram to highlight commonly identifed protein targets between four classifiers
 plot_venn(p_rf,p_svm,p_rbf,p_mlp)
+
+
+#### LATENT NETWORK STAGE ####
+ppi_net <- build_network(ppi)  # create an igraph object.
+
+ppi_latent <- build_latent(ppi_net)  # make the latent model.
+
+
+
+
+
 
 
 

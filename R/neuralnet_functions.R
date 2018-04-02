@@ -35,17 +35,17 @@ delete_isolates <- function(gt) {
   
 }
 
-build_network <- function(ppi){
+build_network <- function(ppt){
   # unsure if protein targets are part of the giant connected ppi network
   # assign 1=target; 0=non-target to each protein
   
   # remove multiple genes
-  ppi$Gene_A <-gsub("\\|.*","",ppi$Gene_A)
-  ppi$Gene_B <-gsub("\\|.*","",ppi$Gene_B)  # 
+  ppt$Gene_A <-gsub("\\|.*","",ppt$Gene_A)
+  ppt$Gene_B <-gsub("\\|.*","",ppt$Gene_B)  # 
   
   un_targets <- (unique(drug_targets$Gene))        # 1,860 unique protein targets
   length(un_targets)
-  un_ppi <- (unique(c(ppi$Gene_A,ppi$Gene_B)))      # 15,792 unique general proteins in ppi
+  un_ppi <- (unique(c(ppt$Gene_A,ppt$Gene_B)))      # 15,792 unique general proteins in ppi
   length(un_ppi)
   
   joint_ppi <- un_targets[un_targets %in% un_ppi]  # 1,293 targets are part of giant connected network (we lose 567 targets!)
@@ -54,26 +54,63 @@ build_network <- function(ppi){
   # dataframe containing targets and non-target proteins. Annotate with:
   # 1. target; 2. hub; 
   # create ppi network (igraph object) and annotate with target or not target
-  ppi_net <- graph.data.frame(ppi)
-  ppi_net <- as.undirected(ppi_net); 
-  ppi_net <- igraph::simplify(ppi_net)  # remove duplicates and self-loops
-  ppi_net <- delete_isolates(ppi_net)
-  delete.vertices(igraph::simplify(ppi_net), igraph::degree(ppi_net)==0)
+  ppi_temp <- igraph::graph.data.frame(ppt)
+  ppi_temp <- igraph::as.undirected(ppi_temp)
+  ppi_temp <- igraph::simplify(ppi_temp)  # remove duplicates and self-loops
+  ppi_temp <- delete_isolates(ppi_temp)
+  igraph::delete.vertices(igraph::simplify(ppi_temp), igraph::degree(ppi_temp)==0)
   
-  V(ppi_net)[1:vcount(ppi_net)]$target <- 0   # Intialise all to zeros
-  V(ppi_net)[1:vcount(ppi_net)]$hub <- 0   # Intialise all to zeros
-  V(ppi_net)[1:vcount(ppi_net)]$type <- "unknown"   # Intialise protein "type" to unknown
+  V(ppi_temp)[1:vcount(ppi_temp)]$target <- 0   # Intialise all to zeros
+  V(ppi_temp)[1:vcount(ppi_temp)]$hub <- 0   # Intialise all to zeros
+  V(ppi_temp)[1:vcount(ppi_temp)]$type <- "Unknown"   # Intialise protein "type" to unknown
+  V(ppi_temp)[1:vcount(ppi_temp)]$coreness <- 0   # Intialise all to zeros
   
   # get main component only - ignore lessor weakly connected groups
-  V(ppi_net)$comp <- igraph::components(ppi_net)$membership
-  ppi_net <- igraph::induced_subgraph(ppi_net,V(ppi_net)$comp==1)
+  V(ppi_temp)$comp <- igraph::components(ppi_temp)$membership
+  ppi_temp <- igraph::induced_subgraph(ppi_temp,V(ppi_temp)$comp==1)
   
   # remove from joint_ppi the lost nodes 
-  survivors <- V(ppi_net)$name
+  survivors <- V(ppi_temp)$name
   joint_ppi <- un_targets[un_targets %in% survivors] 
   
-  ppi_net <- igraph::set_vertex_attr(ppi_net,"target",joint_ppi,1) # Now assign "1" if protein is a target (very neat!)
-  return(ppi_net)
+  # determine if protein is a hub
+  netstats <- get_gstatistics(ppi_temp)
+  hubs <- find_hubs(netstats[[2]])
+  
+  # get the coreness for each protein # set_vertex_attr("label", value = LETTERS[1:10])
+  coreness <- graph.coreness(as.undirected(ppi_temp))
+  
+  # Remove small quantity proteins; Adhesion; Nuclear Other; Antibody; CD Molecules; Ribosomal; Cytokine; Surface Antigen; Membrane other
+  drug_targets <-  # Only keep protein target types with at least 50 occurences
+    drug_targets %>%
+    add_count(TargetClass,sort=TRUE) %>%
+    filter(n > 50)
+  
+  # change names for drug_target and protein_class types
+  drug_targets$TargetClass[drug_targets$TargetClass == "Ion channel"] <- "IC"
+  drug_targets$TargetClass[drug_targets$TargetClass == "Nuc receptor"] <- "NR"
+  drug_targets$TargetClass[drug_targets$TargetClass == "Transcription"] <- "TF"
+  drug_targets$TargetClass[drug_targets$TargetClass == "Cytosolic other"] <- "Transporter"
+  drug_targets$TargetClass[drug_targets$TargetClass == "Unclassified"] <- "Unknown"
+  protein_class$TargetClass[protein_class$TargetClass == "oGPCR"] <- "GPCR"
+  protein_class$TargetClass[protein_class$TargetClass == "TF; Epigenetic"] <- "TF"
+  protein_class$TargetClass[protein_class$TargetClass == "Epigenetic"] <- "TF"
+  
+  # assumes "more_proteins" has beenloaded by neuralnet_data.R
+  drug_targets2 <- drug_targets[,2:3]
+  all_proteins <- rbind(more_proteins,protein_class,drug_targets2)
+  all_proteins <- all_proteins %>% distinct(Gene,.keep_all = TRUE) # remove duplicates
+    
+  ppi_names <- V(ppi_temp)$name
+  ppi_present <- all_proteins[all_proteins$Gene %in% ppi_names,]
+    
+  ppi_temp <- igraph::set_vertex_attr(ppi_temp,"type",ppi_present$Gene,ppi_present$TargetClass) # Now assign target types
+  
+  ppi_temp <- igraph::set_vertex_attr(ppi_temp,"coreness",names(coreness),coreness) # Now assign coreness
+  ppi_temp <- igraph::set_vertex_attr(ppi_temp,"target",joint_ppi,1) # Now assign "1" if protein is a target (very neat coding!)
+  ppi_temp <- igraph::set_vertex_attr(ppi_temp,"hub",hubs$genenames,1) # Now assign "1" if protein is a hub (very neat coding!)
+  # vertex_attr(g)
+  return(ppi_temp)
 }
 
 
@@ -561,6 +598,43 @@ plot_venn <- function(p_rf,p_svm,p_rbf,p_mlp){
   grid.draw(venn.plot)  
   
   
+}
+
+# find_hubs() when presented with graph stats object will search for hubs and return list
+# it will also add genenames to hublist. Need to create igraph object first then run get
+# gs_statistics() to get the required data on "degree" for each protein.
+find_hubs <- function(gstats){
+  genenames <- as.character(rownames(gstats))
+  hublist <- cbind(gstats,genenames)
+  cutoff <- quantile(gstats$degree, probs = c(0.70, 0.75, 0.8, 0.85, 0.9, 0.99), na.rm = TRUE) 
+  hublist <- filter(hublist,degree > cutoff[1])
+  hublist <- data.frame(lapply(hublist, as.character), stringsAsFactors=FALSE)
+  
+  return(hublist)
+}
+
+# is_hub_target() receives a list of hubs, the drug_target data and the PPI network to see if
+# these hub proteins are also targets.
+is_hub_target <- function(hlist,dt,ppi){
+  hub_targ_list <- dt[1,] # instantiate before use
+  gnames <- hlist$genenames
+  totalgenes <- c(ppi[,1],ppi[,2])
+  cat("\nWe have ",length(unique(totalgenes))," unique genes in PPI network")
+  cat("\nWe have ",length(unique(gnames))," unique HUB genes in PPI network")
+  for (i in 1:length(gnames)){
+    gene <- gnames[i] # get hub genes individually and see if they in lists of targets
+    glist <- filter(dt, Gene == gene)  # This bit is OK
+    if(nrow(glist) > 0){
+      hub_targ_list <- rbind(hub_targ_list,glist) }
+  }
+  # Line below removes duplicates that appear in two variables
+  hub_targ_list <-hub_targ_list[!(duplicated(hub_targ_list[c("DrugName","Gene")]) | duplicated(hub_targ_list[c("DrugName","Gene")], fromLast = TRUE)), ]
+  hub_targ_list <- hub_targ_list[-1,]    # 1st entry is rubbish, so remove it
+  cat("\nWe have ",length(unique(hub_targ_list$Gene))," unique genes that are hubs AND targets")
+  cat("\nWe have ",length(unique(dt$Gene)) - length(unique(hub_targ_list$Gene)),   " unique genes that are targets but NOT hubs")
+  cat("\nWe have ",length(unique(dt$Gene)),   " unique genes that are targets in total")
+  
+  return(hub_targ_list)
 }
 
 

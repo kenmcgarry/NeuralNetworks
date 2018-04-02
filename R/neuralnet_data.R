@@ -38,6 +38,7 @@ names(protein_class)[names(protein_class)=="HGNC.Sym"] <- "Gene"
 protein_class <- protein_class[!(duplicated(protein_class[c("TargetClass","Gene")]) | duplicated(protein_class[c("TargetClass","Gene")], fromLast = TRUE)), ]
 protein_class <- na.omit(protein_class)
 
+more_proteins <- read.csv("c:\\R-files\\proteins\\targets.csv", header=TRUE,stringsAsFactors = FALSE,sep=",")
 
 
 

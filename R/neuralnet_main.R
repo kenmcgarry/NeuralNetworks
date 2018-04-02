@@ -52,6 +52,7 @@ acc <- table(pred_test, ytest)
 acc <- as.vector(acc); TN <- acc[1]; FN <- acc[2]; FP <- acc[3]; TP <- acc[4]  
 cat("\nSVM accuracy calculated by (TP+TN)/(TP+TN+FP+FN)= ",(TP + TN)/(TP + TN + FP + FN))
 caret::confusionMatrix(data=pred_test,reference=ytest,positive="1")
+caret::confusionMatrix(data=pred_test,reference=ytest, mode = "prec_recall", positive="1")
 auc.perf = ROCR::performance(pred_svm, measure = "auc")
 auc.perf@y.values
 
@@ -68,11 +69,13 @@ acc <- table(pred_rbf, ytest)
 acc <- as.vector(acc); TN <- acc[1]; FN <- acc[2]; FP <- acc[3]; TP <- acc[4]  
 cat("\nRBF accuracy calculated by (TP+TN)/(TP+TN+FP+FN)= ",(TP + TN)/(TP + TN + FP + FN))
 caret::confusionMatrix(data=pred_rbf,reference=ytest,positive="1")
+caret::confusionMatrix(data=pred_rbf,reference=ytest, mode = "prec_recall", positive="1")
 auc.perf = ROCR::performance(pred, measure = "auc")
 auc.perf@y.values
 
 # Train Random Forest on data 
-rf_model <-randomForest(as.factor(ytrain) ~.,data=xtrain[,1:149],proximity=TRUE,keep.forest=TRUE,ntree=500,mtry=12)
+rf_model <-randomForest(as.factor(ytrain) ~.,data=xtrain[,1:149],proximity=TRUE,
+                        keep.forest=TRUE,ntree=500,mtry=12)
 predicted_rf <- predict(rf_model,newdata=xtest[,1:149],type = "prob")  
 pred_rf <- ROCR::prediction((predicted_rf[,2]),ytest)
 auc.perf = ROCR::performance(pred_rf, measure = "auc")
@@ -84,6 +87,7 @@ x <- rf.roc@x.values
 y <- rf.roc@y.values
 pred_rf <- stats::predict(rf_model,xtest)
 caret::confusionMatrix(data=pred_rf,reference=ytest,positive="1")
+caret::confusionMatrix(data=pred_rf,reference=ytest, mode = "prec_recall", positive="1")
 
 order(importance(rf_model), 2)
 
@@ -118,13 +122,15 @@ prediction <- c('target', 'nontarget')[idx]
 acc <- table(prediction, ytest)
 acc <- as.vector(acc); TN <- acc[1]; FN <- acc[2]; FP <- acc[3]; TP <- acc[4]  
 cat("\nMLP accuracy calculated by (TP+TN)/(TP+TN+FP+FN)= ",(TP + TN)/(TP + TN + FP + FN))
+mlp_predict <- 
 caret::confusionMatrix(data=mlp_predict,reference=ytest,positive="1")
+caret::confusionMatrix(data=mlp_predict,reference=ytest, mode = "prec_recall", positive="1")
 
 prediction[prediction =="target"] <- 1
 prediction[prediction =="nontarget"] <- 0
 prediction <- factor2int(as.integer(prediction))
 pred_mlp <- ROCR::prediction(prediction,ytest)
-auc.perf = ROCR::performance(pred_mlp, measure = "auc")
+auc.perf <- ROCR::performance(pred_mlp, measure = "auc")
 auc.perf@y.values
 
 
@@ -148,6 +154,7 @@ nnet_pred <- predict(nnet_model, xtest[,1:149], type = "class")
 acc <- as.vector(acc); TN <- acc[1]; FN <- acc[2]; FP <- acc[3]; TP <- acc[4]  
 cat("\nMLP accuracy calculated by (TP+TN)/(TP+TN+FP+FN)= ",(TP + TN)/(TP + TN + FP + FN))
 caret::confusionMatrix(data=nnet_pred,reference=ytest,positive="1")
+caret::confusionMatrix(data=nnet_pred,reference=ytest, mode = "everything", positive="1")
 
 pred_mlp <- ROCR::prediction(factor2int(nnet_pred),ytest)
 mlp.roc <- ROCR::performance(pred_mlp, "tpr", "fpr")
@@ -224,9 +231,157 @@ plot_venn(p_rf,p_svm,p_rbf,p_mlp)
 
 
 #### LATENT NETWORK STAGE ####
-ppi_net <- build_network(ppi)  # create an igraph object.
+# VERY MEMORY INTENSIVE AND SLOW, (16 hours for 500 proteins+crossvalidation) HENCE ONLY USE NECESSARY DATA
+# START NEW R SESSION FROM THIS POINT
+library(eigenmodel)
 
-ppi_latent <- build_latent(ppi_net)  # make the latent model.
+setwd("C:/R-files/NeuralNet")  # now point to where the new code lives
+source("neuralnet_functions.R")  # load in the functions required for this work. 
+source("neuralnet_data.R")
+load("latent.RData")
+ppi_net <- build_network(ppi) # create an igraph object with attributes of hub, target, proteintype, k-core.
+set.seed(42)
+
+# create permutations of smaller (PSIZE) ppi network (otherwise gives memory allocation error : 1.8GB)
+PSIZE <- 1000
+ppi_names <- V(ppi_net)$name
+new_names <- sample(ppi_names,PSIZE)
+new_ppi <- induced.subgraph(ppi_net,which(V(ppi_net)$name %in% new_names))
+
+A <- igraph::get.adjacency(new_ppi,sparse = FALSE)
+ppi.fit1 <- eigenmodel::eigenmodel_mcmc(A, R=2, S=11000,burn=10000)
+
+#Creat hub covariate
+hub.op <- vertex_attr(new_ppi)$hub %o%  vertex_attr(new_ppi)$hub
+hub.effect <- matrix(as.numeric(hub.op %in% c(1, 4, 9)), PSIZE, PSIZE)
+hub.effect <- array(hub.effect,dim=c(PSIZE, PSIZE, 1))
+ppi.fit2 <- eigenmodel_mcmc(A, hub.effect, R=2,S=11000,burn=10000)
+
+# Create type (protein type) covariate but convert from strings to factors
+type.fac <- as.factor(vertex_attr(new_ppi)$type)
+type.fac <- as.numeric(type.fac)
+type.op <- type.fac %o% type.fac
+type.effect <- matrix(as.numeric(type.op %in% c(1, 4, 9)),PSIZE,PSIZE)
+type.effect <- array(type.effect,dim=c(PSIZE, PSIZE, 1))
+ppi.fit3 <- eigenmodel_mcmc(A, type.effect,R=2, S=11000, burn=10000)
+
+# Create core covariate
+core.op <- vertex_attr(new_ppi)$coreness %o% vertex_attr(new_ppi)$coreness
+core.effect <- matrix(as.numeric(core.op %in% c(1, 4, 9)),PSIZE,PSIZE)
+core.effect <- array(core.effect,dim=c(PSIZE, PSIZE, 1))
+ppi.fit4 <- eigenmodel_mcmc(A, core.effect,R=2, S=11000, burn=10000)
+
+# Get eigenvectors
+latent1 <- eigen(ppi.fit1$ULU_postmean)$vec[, 1:2]
+latent2 <- eigen(ppi.fit2$ULU_postmean)$vec[, 1:2]
+latent3 <- eigen(ppi.fit3$ULU_postmean)$vec[, 1:2]
+latent4 <- eigen(ppi.fit4$ULU_postmean)$vec[, 1:2]
+
+# Examine posterior means of latent variables
+apply(ppi.fit1$L_postsamp, 2, mean)
+apply(ppi.fit2$L_postsamp, 2, mean)
+apply(ppi.fit3$L_postsamp, 2, mean)
+apply(ppi.fit4$L_postsamp, 2, mean)
+
+# Test model goodness of fit
+perm.index <- sample(1:((PSIZE*(PSIZE-1))/2)) # permutations
+nfolds <- 5
+nmiss <- ((PSIZE*(PSIZE-1))/2)/nfolds
+Avec <- A[lower.tri(A)]
+Avec.pred1 <- numeric(length(Avec))
+
+
+# RECREATE SAME MODELS BUT WITH LOOP TO IMPLEMENT n-fold CROSS-VALIDATION 
+perf1 <- list() # create empty vector of perfs for ROC-Curves
+auc1 <- list() # create empty vector of area under curves
+pred1 <- list() # create empty vector of predictions for PR-Curves
+
+perf2 <- list() # create empty vector of perfs for ROC-Curves
+auc2 <- list() # create empty vector of area under curves
+pred2 <- list() #
+
+perf3 <- list() # create empty vector of perfs for ROC-Curves
+auc3 <- list() # create empty vector of area under curves
+pred3 <- list() #
+
+perf4 <- list() # create empty vector of perfs for ROC-Curves
+auc4 <- list() # create empty vector of area under curves
+pred4 <- list() #
+
+for (j in 1:4){
+  if(j==1) modelversion <- NULL   # select only connectivity
+  if(j==2) modelversion <- hub.effect  # select only hub variable
+  if(j==3) modelversion <- core.effect  # select only coreness variable
+  if(j==4) modelversion <- type.effect  # select only type variable
+  # CHUNK 31 - cross validation.
+  for(i in seq(1,nfolds)){
+    # Index of missing values.
+    miss.index <- seq(((i-1) * nmiss + 1),(i*nmiss), 1)
+    A.miss.index <- perm.index[miss.index]
+    
+    # Fill a new Atemp appropriately with NA's.
+    Avec.temp <- Avec
+    Avec.temp[A.miss.index] <- rep("NA", length(A.miss.index))
+    Avec.temp <- as.numeric(Avec.temp)
+    Atemp <- matrix(0, PSIZE, PSIZE) # varying these two numbers leads to different accuracies
+    Atemp[lower.tri(Atemp)] <- Avec.temp
+    Atemp <- Atemp + t(Atemp)
+    
+    # Now fit model and predict.
+    Y <- Atemp
+    model1.fit <- eigenmodel_mcmc(Y, modelversion,R=2,S=11000, burn=10000) # change model here
+    model1.pred <- model1.fit$Y_postmean
+    model1.pred.vec <- model1.pred[lower.tri(model1.pred)]
+    Avec.pred1[A.miss.index] <- model1.pred.vec[A.miss.index]
+  }
+  #pred1 <- floor(Avec.pred1)
+  Avec[Avec==2] <- 0
+  if(j==1){
+    pred1 <- ROCR::prediction(Avec.pred1, Avec)
+    perf1 <- ROCR::performance(pred1, "tpr", "fpr")
+    auc1 <- ROCR::performance(pred1, "auc")}
+  if(j==2){
+    pred2 <- ROCR::prediction(Avec.pred1, Avec)
+    perf2 <- ROCR::performance(pred2, "tpr", "fpr")
+    auc2 <- ROCR::performance(pred2, "auc")}
+  if(j==3){
+    pred3 <- ROCR::prediction(Avec.pred1, Avec)
+    perf3 <- ROCR::performance(pred3, "tpr", "fpr")
+    auc3 <-  ROCR::performance(pred3, "auc")}
+  if(j==4){
+    pred4 <- ROCR::prediction(Avec.pred1, Avec)
+    perf4 <- ROCR::performance(pred4, "tpr", "fpr")
+    auc4 <-  ROCR::performance(pred4, "auc")}
+}
+
+
+
+# Plot ROC curves
+# ROC PLOT COMPARING THREE MODELS
+plot(perf1, col="red", lwd=2)
+plot(perf2, add = TRUE, col="blue",lwd=2)
+plot(perf3, add = TRUE, col="green",lwd=2)
+plot(perf4, add = TRUE, col="orange",lwd=2) 
+
+library(ROCR)
+
+# CHUNK 33
+slot(auc1, "y.values")
+slot(auc2, "y.values")
+slot(auc3, "y.values")
+slot(auc4, "y.values")
+
+mpred2 <- as.numeric(unlist(slot(pred2,"predictions")))
+caret::confusionMatrix(data=round(mpred2),reference=Avec, mode = "everything", positive="1")
+
+## ERGM CODE
+#ppi_s <- network::as.network(as.matrix(A),directed=FALSE)
+#network::set.vertex.attribute(ppi_s,"hub",v.attrs$hub)
+#network::set.vertex.attribute(ppi_s,"type",v.attrs$type)
+#network::set.vertex.attribute(ppi_s,"hub",v.attrs$)
+#network::set.vertex.attribute(ppi_s,"hub",v.attrs$hub)
+#ppi_ergm <- build_ergm(ppi_net)  # make the ergm model.
+
 
 
 

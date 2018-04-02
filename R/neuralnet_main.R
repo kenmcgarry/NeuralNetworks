@@ -233,7 +233,10 @@ plot_venn(p_rf,p_svm,p_rbf,p_mlp)
 #### LATENT NETWORK STAGE ####
 # VERY MEMORY INTENSIVE AND SLOW, (16 hours for 500 proteins+crossvalidation) HENCE ONLY USE NECESSARY DATA
 # START NEW R SESSION FROM THIS POINT
+# http://ptrckprry.com/course/ssd/lecture/latentnet.html
+
 library(eigenmodel)
+library(latentnet)
 
 setwd("C:/R-files/NeuralNet")  # now point to where the new code lives
 source("neuralnet_functions.R")  # load in the functions required for this work. 
@@ -243,12 +246,32 @@ ppi_net <- build_network(ppi) # create an igraph object with attributes of hub, 
 set.seed(42)
 
 # create permutations of smaller (PSIZE) ppi network (otherwise gives memory allocation error : 1.8GB)
-PSIZE <- 1000
+PSIZE <- 200
 ppi_names <- V(ppi_net)$name
 new_names <- sample(ppi_names,PSIZE)
 new_ppi <- induced.subgraph(ppi_net,which(V(ppi_net)$name %in% new_names))
-
 A <- igraph::get.adjacency(new_ppi,sparse = FALSE)
+
+######################################
+# extract a series of subgraphs
+k_cores <- c("PSMA3","PPIG","KIR3DS1","SELE","FPR2","FXYD6","PTPRK","COL4A3BP","RPA2","SLC38A6",
+             "SLC10A3","SLC16A14","UGDH","STEAP1","FZD4","SLC16A13","GRID1","GOT1L1","MBTPS2",
+             "EPHA10", "AKAP8",  "GPR6",   "ADAMTS2", "CELA3A", "MAT1A","FXYD6","PPIG","FZD5","CRYZL1",
+             "ACP5","PTPRK","SLC4A2","FPR2","CD47","BRCA2","SELE","KIR3DS1","PSMA3")
+explore_subgraph <- induced.subgraph(graph=ppi_net,vids=unlist(neighborhood(graph=ppi_net,order=1,nodes=k_cores[2])))
+length(V(explore_subgraph)) 
+A <- igraph::get.adjacency(explore_subgraph,sparse = FALSE)
+
+######################################
+# fir ERGM to A
+samp_fit <- ergmm(A ~ euclidean(d=2))
+samp_fit <- ergmm(A ~ euclidean(d=2, G=3)) #cluster based
+plot(samp_fit, pie=TRUE)
+summary(samp_fit)
+plot(samp_fit)
+mcmc.diagnostics(samp_fit)
+######################################
+
 ppi.fit1 <- eigenmodel::eigenmodel_mcmc(A, R=2, S=11000,burn=10000)
 
 #Creat hub covariate

@@ -159,8 +159,8 @@ acc <- table(predict(nnet_model, xtest[,1:149], type = "class"),ytest)
 nnet_pred <- predict(nnet_model, xtest[,1:149], type = "class")
 acc <- as.vector(acc); TN <- acc[1]; FN <- acc[2]; FP <- acc[3]; TP <- acc[4]  
 cat("\nMLP accuracy calculated by (TP+TN)/(TP+TN+FP+FN)= ",(TP + TN)/(TP + TN + FP + FN))
-caret::confusionMatrix(data=nnet_pred,reference=ytest,positive="1")
-caret::confusionMatrix(data=nnet_pred,reference=ytest, mode = "everything", positive="1")
+caret::confusionMatrix(data=as.factor(nnet_pred),reference=ytest,positive="1")
+caret::confusionMatrix(data=as.factor(nnet_pred),reference=ytest, mode = "everything", positive="1")
 
 pred_mlp <- ROCR::prediction(factor2int(nnet_pred),ytest)
 mlp.roc <- ROCR::performance(pred_mlp, "tpr", "fpr")
@@ -200,8 +200,8 @@ uindex <- base::sample(nrow(unknown),10) # indices of training samples
 candidates <- unknown[sample(1:nrow(unknown), 1000,replace=FALSE),] 
 candidates <- unknown[1:600,1:149]
 candidates <- data.frame(candidates)
-
 candidates <- unknown[1:1280,1:149]
+candidates <- na.omit(candidates)
 
 # VENN: ensure models output in common format to allow comparisions with Venn diagram however
 # a large amount of processing is required for the mlp, since neuralnet package is very different.
@@ -210,27 +210,28 @@ candidates_svm <- stats::predict(svm_model,candidates)
 candidates_rbf <- stats::predict(rbf_model,candidates)
 candidates_mlp <- neuralnet::compute(mlp_model,candidates)$net.result
   maxidx <- function(arr) {return(which(arr == max(arr))) }
+  
   idx <- apply(candidates_mlp, c(1), maxidx)
   idx <- as.integer(idx)
   prediction <- c('target', 'nontarget')[idx]
   prediction <- gsub('nontarget', 0, prediction)
   prediction <- gsub('target', 1, prediction)
 
-# make a nice well structured data frame  
+# make a nice well structured data frame, for some reason svm and rbf only produce 1264 candidates from 1280 test data  
 cnames <- rownames(candidates)
-comp_models <- data.frame(candidates=cnames,
+comp_model <- data.frame(candidates=cnames,
                           rf =as.vector(candidates_rf),
                           svm=as.vector(candidates_svm), 
                           rbf=as.vector(candidates_rbf),
                           mlp=as.vector(prediction))
 
 # use data frame to fill classifier lists of what they think are target proteins
-p_rf  <- comp_models$candidates[comp_models$rf  ==1]
-p_svm <- comp_models$candidates[comp_models$svm ==1]
-p_rbf <- comp_models$candidates[comp_models$rbf ==1]
-p_mlp <- comp_models$candidates[comp_models$mlp ==1]
+p_rf  <- na.omit(comp_model$candidates[comp_model$rf  ==1])
+p_svm <- na.omit(comp_model$candidates[comp_model$svm ==1])
+p_rbf <- na.omit(comp_model$candidates[comp_model$rbf ==1])
+p_mlp <- na.omit(comp_model$candidates[comp_model$mlp ==1])
 
-Reduce(intersect, list(p_rf,p_svm,p_rbf,p_mlp))  # the proteins identified by all four classifiers
+#commonproteins <- Reduce(intersect, list(p_rf,p_svm,p_rbf,p_mlp))  # the proteins identified by all four classifiers
 
 # plot a Venn diagram to highlight commonly identifed protein targets between four classifiers
 plot_venn(p_rf,p_svm,p_rbf,p_mlp)

@@ -121,13 +121,16 @@ mlp_predict <- neuralnet::compute(mlp_model, xtest[,1:149])$net.result
 # Put multiple binary output to categorical output
 maxidx <- function(arr) {return(which(arr == max(arr))) }
 idx <- apply(mlp_predict, c(1), maxidx)
+
+temppredict <- as.factor(ones_twos(idx))
+
 prediction <- c('target', 'nontarget')[idx]
 acc <- table(prediction, ytest)
 acc <- as.vector(acc); TN <- acc[1]; FN <- acc[2]; FP <- acc[3]; TP <- acc[4]  
 cat("\nMLP accuracy calculated by (TP+TN)/(TP+TN+FP+FN)= ",(TP + TN)/(TP + TN + FP + FN))
-mlp_predict <- 
-caret::confusionMatrix(data=mlp_predict,reference=ytest,positive="1")
-caret::confusionMatrix(data=mlp_predict,reference=ytest, mode = "prec_recall", positive="1")
+
+caret::confusionMatrix(data=temppredict,reference=ytest,positive="1")
+caret::confusionMatrix(data=temppredict,reference=ytest, mode = "prec_recall", positive="1")
 
 prediction[prediction =="target"] <- 1
 prediction[prediction =="nontarget"] <- 0

@@ -499,6 +499,18 @@ messyfactor2int <- function(targettype){
   return(targettype)
 }
 
+ones_twos <- function(targettype){
+  targettype <- as.numeric(targettype)
+  for (i in 1:length(targettype)){
+    if(targettype[i] == 1) {  
+      targettype[i] <- 0}}
+  for (i in 1:length(targettype)){
+    if(targettype[i] == 2) {  
+      targettype[i] <- 1}}
+  
+  return(targettype)
+}
+
 # plot several ROC curves on one plot
 roc_plot <- function(...){
   args = list(...)

@@ -146,14 +146,13 @@ go_slim_annotation <- function(mylist){
   assign("go_bp", TRUE, env=globalenv())
   
   # create the matrix for classification algorithms, if a GO term is present mark it with by "1" in that column
-  mm <- matrix(0, 149, length(names(gostuff)))  # Number of GO terms in GoSlim (CC+BP+MF) x Number of genes
+  mm <- matrix(0, 149, length(names(gostuff)))  # mm=Number of GO terms in GoSlim (CC+BP+MF) x Number of genes
   colnames(mm) <- names(gostuff)
   rownames(mm) <- give_rownames_mm()
   
   for (i in 1:length(names(gostuff))){
     myCollection <- GOCollection(gostuff[[i]])
     genename <- names(gostuff[i])
-    ###go_empty_mf$Gene <- genename 
     obo <- system.file("extdata","goslim_generic.obo", package="GSEABase") # generic terms by GO consortium
     #obo <- system.file("extdata","goslim_chembl.obo", package="GSEABase") # Chembl Drug Target developed by Mutowo and Lomax
     #obo <- system.file("extdata","goslim_pir.obo", package="GSEABase") #Protein Info Resource by Darren Natale
@@ -373,7 +372,7 @@ error_go_bp <- function(){
 # DrugCentral is a comprehensive drug information resource for FDA drugs and drugs approved outside USA. The 
 # resources can be searched using: drug, target, disease, pharmacologic action, terms. 
 load_drugtargets <- function(){
-  drug_targets <- read.csv(file="C://R-files//disease//drug.target.interaction.tsv", header=TRUE, sep="\t",stringsAsFactors = FALSE)
+  drug_targets <- read.csv(file="C://common_laptop//R-files//disease//drug.target.interaction.tsv", header=TRUE, sep="\t",stringsAsFactors = FALSE)
   names(drug_targets)[names(drug_targets)=="DRUG_NAME"] <- "DrugName"
   names(drug_targets)[names(drug_targets)=="TARGET_CLASS"] <- "TargetClass"
   names(drug_targets)[names(drug_targets)=="GENE"] <- "Gene"

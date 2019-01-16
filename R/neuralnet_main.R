@@ -1,17 +1,16 @@
 # neuralnet_proteins.R
 # Predict protein type based on gene ontology mappings
-# for Neural Computing Applications or possibly BMC Bioinformatics
+# To be submitted to Advances in data Analysis and Classification
+# http://www.springer.com/statistics/journal/11634
 # started : 19/1/2018
 # completed:
 
-
 memory.limit(1510241024*1024) # allocate RAM memory (15 GBs)
-setwd("C:/R-files/NeuralNet")  # now point to where the new code lives
-load("NCA-27thMarch2018.RData")
+setwd("C:/common_laptop/R-files/NeuralNet")  # now point to where the new code lives
+load("hybrid12thApril2018.RData")
 #load("matrixdata.RData") # contains mmt and mcrap
 source("neuralnet_functions.R")  # load in the functions required for this work. 
 source("neuralnet_data.R")  # load in raw data, preprocess it. 
-
 
 ### Only uncomment this code if you intend building training matrix (mm & mt) from scratch - it takes a long time!
 #pnames <- unique(c(unique(ppi$Gene_A),unique(ppi$Gene_B)))
@@ -27,7 +26,7 @@ positives <- mnew[mnew$targets == 1,]  # get all targets (1,449)
 negatives <- mnew[mnew$targets == 0,]  # get all nontargets (11,567)
 allnegatives <- data.frame(negatives)
 negatives <- sample_n(negatives, nrow(positives)) # only use 1,449 of them to match positives
-balanced_dat <- rbind(positives,negatives)
+bdata <- rbind(positives,negatives)
 
 
 ## Prepare a training and a test set 
@@ -89,7 +88,10 @@ pred_rf <- stats::predict(rf_model,xtest)
 caret::confusionMatrix(data=pred_rf,reference=ytest,positive="1")
 caret::confusionMatrix(data=pred_rf,reference=ytest, mode = "prec_recall", positive="1")
 
-order(importance(rf_model), 2)
+# examine most important variable by order using Gini Index
+impvar <- data.frame(importance(rf_model))
+impvar <- cbind(rownames(impvar),impvar)  # we need variable names
+arrange(impvar, desc(MeanDecreaseGini))
 
 acc<-table((predicted_rf[,2]), ytest)
 print(rf_model)
@@ -115,6 +117,7 @@ mlp_model <- neuralnet::neuralnet(a,nnet_train,lifesign="full",act.fct="logistic
          
 # Now predict MLP on test data
 mlp_predict <- neuralnet::compute(mlp_model, xtest[,1:149])$net.result
+
 # Put multiple binary output to categorical output
 maxidx <- function(arr) {return(which(arr == max(arr))) }
 idx <- apply(mlp_predict, c(1), maxidx)
@@ -255,18 +258,19 @@ A <- igraph::get.adjacency(new_ppi,sparse = FALSE)
 ######################################
 # extract a series of subgraphs
 k_cores <- c("PSMA3","PPIG","KIR3DS1","SELE","FPR2","FXYD6","PTPRK","COL4A3BP","RPA2","SLC38A6",
-             "SLC10A3","SLC16A14","UGDH","STEAP1","FZD4","SLC16A13","GRID1","GOT1L1","MBTPS2",
-             "EPHA10", "AKAP8",  "GPR6",   "ADAMTS2", "CELA3A", "MAT1A","FXYD6","PPIG","FZD5","CRYZL1",
-             "ACP5","PTPRK","SLC4A2","FPR2","CD47","BRCA2","SELE","KIR3DS1","PSMA3")
-explore_subgraph <- induced.subgraph(graph=ppi_net,vids=unlist(neighborhood(graph=ppi_net,order=1,nodes=k_cores[2])))
+             "SLC10A3","SLC16A14","UGDH","STEAP1","FZD4","SLC16A13","GRID1","GOT1L1","MBTPS2","EPHA10", 
+             "AKAP8",  "GPR6",   "ADAMTS2", "CELA3A", "MAT1A","FXYD6","PPIG","FZD5","CRYZL1","ACP5",
+             "PTPRK","SLC4A2","FPR2","CD47","BRCA2","SELE","KIR3DS1","PSMA3")
+explore_subgraph <- induced.subgraph(graph=ppi_net,vids=unlist(neighborhood(graph=ppi_net,order=1,
+                                                                            nodes=k_cores[34])))
 length(V(explore_subgraph)) 
 A <- igraph::get.adjacency(explore_subgraph,sparse = FALSE)
 
 ######################################
-# fir ERGM to A
+# fit ERGM to A
 samp_fit <- ergmm(A ~ euclidean(d=2))
-samp_fit <- ergmm(A ~ euclidean(d=2, G=3)) #cluster based
-plot(samp_fit, pie=TRUE)
+samp_fit <- ergmm(A ~ euclidean(d=2, G=2)) #cluster based
+plot(samp_fit, pie=TRUE,labels=TRUE)
 summary(samp_fit)
 plot(samp_fit)
 mcmc.diagnostics(samp_fit)
@@ -404,12 +408,5 @@ caret::confusionMatrix(data=round(mpred2),reference=Avec, mode = "everything", p
 #network::set.vertex.attribute(ppi_s,"hub",v.attrs$)
 #network::set.vertex.attribute(ppi_s,"hub",v.attrs$hub)
 #ppi_ergm <- build_ergm(ppi_net)  # make the ergm model.
-
-
-
-
-
-
-
 
 
